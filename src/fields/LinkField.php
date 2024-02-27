@@ -5,7 +5,10 @@ namespace lenz\linkfield\fields;
 use Craft;
 use craft\base\ElementInterface;
 use craft\elements\MatrixBlock;
+use craft\gql\GqlEntityRegistry;
 use Exception;
+use GraphQL\Type\Definition\InputObjectType;
+use GraphQL\Type\Definition\Type;
 use GraphQL\Type\Definition\Type as GraphQLType;
 use InvalidArgumentException;
 use lenz\craft\utils\foreignField\ForeignField;
@@ -125,7 +128,66 @@ class LinkField extends ForeignField
     return LinkGqlType::getType();
   }
 
-  /**
+  public function getContentGqlMutationArgumentType(): GraphQLType|array
+  {
+      return [
+          'name' => $this->handle,
+          'type' => GqlEntityRegistry::getOrCreate('linkField_input_type', fn () => new InputObjectType([
+              'name' => 'linkField_input_type',
+              'fields' => function () {
+                  return [
+                      'type' => [
+                          'name' => 'type',
+                          'type' => Type::string(),
+                          'description' => 'One of url, email, tel, asset, category, entry, user, site, or craftCommerce-product'
+                      ],
+                      'url' => [
+                          'name' => 'url',
+                          'type' => Type::string(),
+                      ],
+                      'id' => [
+                          'name' => 'id',
+                          'type' => Type::int(),
+                      ],
+                      'target' => [
+                          'name' => 'target',
+                          'type' => Type::string(),
+                      ],
+                      'customText' => [
+                          'name' => 'customText',
+                          'type' => Type::string(),
+                      ]
+                  ];
+              },
+              'normalizeValue' => [self::class, 'normalizeGqlValue'],
+          ])),
+          'description' => $this->instructions,
+      ];
+  }
+
+  public static function normalizeGqlValue(mixed $value) {
+      $type = $value['type'] ?? 'url';
+      if (in_array($type, ['asset', 'category', 'entry', 'user'])) {
+          $data = ['linkedId' => $value['id'] ?? null];
+      }
+      else if (in_array($type, ['site'])) {
+          $data = ['linkedSiteId' => $value['id'] ?? null];
+      }
+      else {
+          $data = ['linkedUrl' => $value['url'] ?? null];
+      }
+
+      return [
+          'type' => $type,
+          'cpForm' => [
+              $type => $data,
+          ],
+          'target' => $value['target'] ?? '_blank',
+          'customText' => $value['customText'],
+      ];
+  }
+
+    /**
    * @param ElementInterface|null $element
    * @return LinkTypeCollection
    */
